@@ -1,0 +1,8 @@
+tap "adoptopenjdk/openjdk"
+tap "azure/functions"
+tap "homebrew/bundle"
+tap "homebrew/cask"
+tap "homebrew/core"
+brew "azure/functions/azure-functions-core-tools@3"
+cask "adoptopenjdk8"
+cask "zulu"
