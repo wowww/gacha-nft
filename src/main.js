@@ -30,8 +30,13 @@ var attributesList = [];
 var dnaList = new Set();
 const DNA_DELIMITER = "-";
 const HashlipsGiffer = require(`${basePath}/modules/HashlipsGiffer.js`);
+const console = require("console");
 
 let hashlipsGiffer = null;
+let globalLayers = [];
+
+const { Parser } = require('json2csv');
+const lodash = require("lodash");
 
 const buildSetup = () => {
   if (fs.existsSync(buildDir)) {
@@ -69,21 +74,42 @@ const cleanName = (_str) => {
 };
 
 const getElements = (path) => {
-  return fs
-    .readdirSync(path)
-    .filter((item) => !/(^|\/)\.[^\/\.]/g.test(item))
-    .map((i, index) => {
-      if (i.includes("-")) {
-        throw new Error(`layer name can not contain dashes, please fix: ${i}`);
-      }
-      return {
-        id: index,
-        name: cleanName(i),
-        filename: i,
-        path: `${path}${i}`,
-        weight: getRarityWeight(i),
-      };
-    });
+
+  const fileArray = fs
+      .readdirSync(path)
+      .filter((item) => !/(^|\/)\.[^\/\.]/g.test(item));
+
+  const results = [];
+
+  fileArray.forEach((file, i) => {
+    const multi = getRarityWeight(file);
+    for (let i = 0; i < multi; i++) {
+      results.push({
+        id: results.length,
+        name: cleanName(file),
+        filename: file,
+        path: `${path}${file}`,
+        weight: 1,
+      })
+    }
+  });
+
+  return lodash.shuffle(results);
+  // return fs
+  //   .readdirSync(path)
+  //   .filter((item) => !/(^|\/)\.[^\/\.]/g.test(item))
+  //   .map((i, index) => {
+  //     if (i.includes("-")) {
+  //       throw new Error(`layer name can not contain dashes, please fix: ${i}`);
+  //     }
+  //     return {
+  //       id: index,
+  //       name: cleanName(i),
+  //       filename: i,
+  //       path: `${path}${i}`,
+  //       weight: getRarityWeight(i),
+  //     };
+  //   });
 };
 
 const layersSetup = (layersOrder) => {
@@ -279,24 +305,31 @@ const isDnaUnique = (_DnaList = new Set(), _dna = "") => {
   return !_DnaList.has(_filteredDNA);
 };
 
-const createDna = (_layers) => {
+const createDna = () => {
   let randNum = [];
-  _layers.forEach((layer) => {
+  console.log(globalLayers)
+
+  globalLayers.forEach((layer) => {
     var totalWeight = 0;
     layer.elements.forEach((element) => {
       totalWeight += element.weight;
     });
-    // number between 0 - totalWeight
-    let random = Math.floor(Math.random() * totalWeight);
+
+    let random = Math.floor(Math.random() * layer.elements.length);
+
     for (var i = 0; i < layer.elements.length; i++) {
-      // subtract the current weight from the random weight until we reach a sub zero value.
-      random -= layer.elements[i].weight;
+      random -= 1;
       if (random < 0) {
-        return randNum.push(
+
+        const rt = randNum.push(
           `${layer.elements[i].id}:${layer.elements[i].filename}${
             layer.bypassDNA ? "?bypassDNA=true" : ""
           }`
         );
+
+        layer.elements.splice(i, 1);
+
+        return rt;
       }
     }
   });
@@ -356,10 +389,13 @@ const startCreating = async () => {
     const layers = layersSetup(
       layerConfigurations[layerConfigIndex].layersOrder
     );
+    globalLayers = layersSetup(
+        layerConfigurations[layerConfigIndex].layersOrder
+    );
     while (
       editionCount <= layerConfigurations[layerConfigIndex].growEditionSizeTo
     ) {
-      let newDna = createDna(layers);
+      let newDna = createDna();
       if (isDnaUnique(dnaList, newDna)) {
         let results = constructLayerToDna(newDna, layers);
         let loadedElements = [];
@@ -427,6 +463,28 @@ const startCreating = async () => {
     layerConfigIndex++;
   }
   writeMetaData(JSON.stringify(metadataList, null, 2));
+
+  const result = [];
+  metadataList.map((item, idx) => {
+    const attributes = {};
+    attributes['id'] = idx + 1;
+    item.attributes.map((item) => {
+      if (item.value !== 'makeup_none') {
+        attributes[item.trait_type] = item.value;
+      }
+    })
+    result.push(attributes);
+  })
+
+  const [fields] = result;
+  const opts = fields;
+
+  const parser = new Parser(opts);
+  const csv = parser.parse(result);
+
+  fs.writeFile("kari.csv", csv, (err) => {
+    if (err) console.log(err);
+  });
 };
 
 module.exports = { startCreating, buildSetup, getElements };
